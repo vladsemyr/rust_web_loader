@@ -1,15 +1,15 @@
-use std::collections::HashMap;
 use std::io;
 use std::io::stdout;
-use std::ops::Deref;
 use std::sync::{Arc, RwLock};
+use chrono::Local;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::{event, ExecutableCommand};
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::{Frame, Terminal};
+use ratatui::layout::{Constraint, Layout};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::widgets::{Block, List, Paragraph};
 use crate::Statistic;
 
 pub fn ui_main(draw_ui: bool, statistic: Arc<RwLock<Statistic>>) -> io::Result<()> {
@@ -49,24 +49,40 @@ fn handle_events() -> io::Result<bool> {
 }
 
 fn ui(frame: &mut Frame, statistic: &Arc<RwLock<Statistic>>) {
-    let mut resp_code: HashMap<u16, usize> = HashMap::new();
-    let mut cps: usize = 0;
-    let mut other_err: usize = 0;
+    let resp_code;
+    let cps;
+    let other_err;
+    let error_log;
 
     {
         let r = statistic.read().unwrap();
         resp_code = r.resp_code.clone();
         cps = r.cps;
         other_err = r.other_err;
+        error_log = r.error_log.clone();
     };
 
-    frame.render_widget(
-        Paragraph::new(
-            vec![
-                Line::from(format!("HTTP code {:?} / кол-во остальных ошибок {}", resp_code, other_err)),
-                Line::from(format!("CPS {}", cps))
-            ]
-        ).block(Block::bordered().title("Статистика")),
-        frame.area(),
-    );
+    let [left_area, right_area] =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .areas(frame.area());
+
+
+    frame.render_widget(Paragraph::new(
+        vec![
+            Line::from(format!("Время {}", Local::now().format("%H:%M:%S"))),
+            Line::from(format!("HTTP code {:?}", resp_code)),
+            Line::from(format!("Кол-во остальных ошибок {}", other_err)),
+            Line::from(format!("CPS {}", cps)),
+        ]
+    ).block(Block::bordered().title("Статистика")), left_area);
+
+    frame
+        .render_widget(
+            error_log
+                .into_iter()
+                .collect::<List>()
+                .block(Block::bordered().title("Ошибки")
+                ),
+            right_area
+        );
 }

@@ -2,7 +2,7 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 
 fn get_default_cps() -> Option<usize> { None }
-fn get_default_url() -> String { "google.com".to_string() }
+fn get_default_url() -> String { "https://google.com".to_string() }
 fn get_default_max_connections() -> Option<u32> { None }
 fn get_default_max_time() -> Option<u32> { None }
 fn get_default_max_threads() -> usize { num_cpus::get() }
@@ -43,7 +43,5 @@ pub fn config_read() -> Config {
     }
 
     println!("{:?}", config);
-    config.cps = Some(100);
-
     config
 }

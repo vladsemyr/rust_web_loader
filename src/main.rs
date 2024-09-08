@@ -5,28 +5,31 @@ mod config;
 use std::collections::HashMap;
 use tokio::task;
 use serde::{Deserialize, Serialize};
-use serde_json::Result;
-use std::{fs, thread};
-use std::error::Error;
-use std::string::ToString;
+use std::{thread};
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::{AtomicBool};
 use std::sync::atomic::Ordering::Relaxed;
 use tokio::sync::Semaphore;
-use tokio_schedule::{every, Job};
 use std::time::Duration;
 use tokio::{time}; // 1.3.0
 use std::io::Write;
 use std::ops::Deref;
-use num_cpus;
-use reqwest::Client;
+use reqwest::{Client};
 use crate::config::config_read;
+use circular_buffer::CircularBuffer;
+use chrono::Local;
+use env_logger::Builder;
+use log::LevelFilter;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Statistic {
     resp_code: HashMap<u16, usize>,
     other_err: usize,
     cps: usize,
+
+    #[serde(skip_serializing)]
+    #[serde(skip_deserializing)]
+    error_log: CircularBuffer::<256, String>,
 }
 
 impl Statistic {
@@ -35,6 +38,7 @@ impl Statistic {
             resp_code: HashMap::new(),
             other_err: 0,
             cps: 0,
+            error_log: CircularBuffer::new(),
         }
     }
 }
@@ -49,13 +53,15 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
     let inprogress_statistic: Arc<RwLock<Statistic>> = Arc::new(RwLock::new(Statistic::new()));
     let ui_statistic: Arc<RwLock<Statistic>> = Arc::new(RwLock::new(Statistic::new()));
     let stop = Arc::new(AtomicBool::new(false));
+    let url = config.url;
 
     for _ in 0..config.max_threads {
         let semaphore = Arc::clone(&semaphore);
         let inprogress_statistic = Arc::clone(&inprogress_statistic);
         let stop = Arc::clone(&stop);
+        let url = url.clone();
 
-        let h = task::spawn(async move {
+        let h = task::spawn(async move  {
             log::info!("Создание потока нагрузки");
 
             let client = Client::builder()
@@ -73,7 +79,7 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
 
-                let resp = client.get("https://46.17.100.64:38991/hahahkdkd33/").send().await;
+                let resp = client.get(&url).send().await;
                 let mut w = inprogress_statistic.write().unwrap();
 
                 match resp {
@@ -81,9 +87,11 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
                         let resp_code = resp.status().as_u16();
                         *w.resp_code.entry(resp_code).or_insert(0) += 1;
                         w.cps += 1;
+                        //w.error_log.push_back(format!("{}| {} - {}", Local::now().format("%H:%M:%S|"), "ok", url));
                     }
                     Err(err) => {
                         //println!("{:?}", err.to_string());
+                        w.error_log.push_back(format!("{}| {}", Local::now().format("%H:%M:%S"), err));
                         w.other_err += 1;
                     }
                 }
@@ -143,6 +151,7 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
                 uw.cps = iw.cps;
                 uw.resp_code = iw.resp_code.clone();
                 uw.other_err = iw.other_err;
+                uw.error_log = iw.error_log.clone();
 
                 iw.cps = 0;
             }
@@ -174,10 +183,6 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
 }
 
 fn log_init() {
-    use chrono::Local;
-    use env_logger::Builder;
-    use log::LevelFilter;
-
     Builder::new()
         .format(|buf, record| {
             writeln!(buf,

@@ -207,6 +207,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "circular-buffer"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da987586004ae7c43b7df5e3f7693775068522e1086f8d9b2d74c778a0f43313"
+
+[[package]]
 name = "colorchoice"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1413,16 +1419,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio_schedule"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c291c554da3518d6ef69c76ea35aabc78f736185a16b6017f6d1c224dac2e0"
-dependencies = [
- "chrono",
- "tokio",
-]
-
-[[package]]
 name = "tower"
 version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1523,6 +1519,7 @@ name = "untitled"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "circular-buffer",
  "env_logger",
  "log",
  "num_cpus",
@@ -1531,7 +1528,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tokio_schedule",
 ]
 
 [[package]]
