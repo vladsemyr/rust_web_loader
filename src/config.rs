@@ -5,8 +5,9 @@ fn get_default_cps() -> Option<usize> { None }
 fn get_default_url() -> String { "https://google.com".to_string() }
 fn get_default_max_connections() -> Option<u32> { None }
 fn get_default_max_time() -> Option<u32> { None }
-fn get_default_max_threads() -> usize { num_cpus::get() }
+fn get_default_thread_count() -> usize { num_cpus::get() }
 fn get_default_request_timeout_sec() -> u64 { 10 }
+fn get_default_check_cert() -> bool { false }
 fn get_default_ui() -> bool { true }
 
 
@@ -24,11 +25,14 @@ pub struct Config {
     #[serde(default = "get_default_max_time")]
     pub max_time: Option<u32>,
 
-    #[serde(default = "get_default_max_threads")]
-    pub max_threads: usize,
+    #[serde(default = "get_default_thread_count")]
+    pub thread_count: usize,
 
     #[serde(default = "get_default_request_timeout_sec")]
     pub request_timeout_sec: u64,
+
+    #[serde(default = "get_default_check_cert")]
+    pub check_cert: bool,
 
     #[serde(default = "get_default_ui")]
     pub ui: bool,

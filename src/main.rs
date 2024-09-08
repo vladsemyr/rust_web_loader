@@ -55,7 +55,7 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
     let stop = Arc::new(AtomicBool::new(false));
     let url = config.url;
 
-    for _ in 0..config.max_threads {
+    for _ in 0..config.thread_count {
         let semaphore = Arc::clone(&semaphore);
         let inprogress_statistic = Arc::clone(&inprogress_statistic);
         let stop = Arc::clone(&stop);
@@ -64,10 +64,11 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
         let h = task::spawn(async move  {
             log::info!("Создание потока нагрузки");
 
-            let client = Client::builder()
+            let mut client = Client::builder()
                 .timeout(Duration::from_secs(config.request_timeout_sec))
-                .build()
-                .unwrap();
+                .danger_accept_invalid_certs(config.check_cert);
+
+            let client = client.build().unwrap();
 
             loop {
                 if config.cps.is_some() {
