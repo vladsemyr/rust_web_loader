@@ -1,0 +1,193 @@
+mod ui;
+mod loader;
+mod config;
+
+use std::collections::HashMap;
+use tokio::task;
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
+use std::{fs, thread};
+use std::error::Error;
+use std::string::ToString;
+use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::Ordering::Relaxed;
+use tokio::sync::Semaphore;
+use tokio_schedule::{every, Job};
+use std::time::Duration;
+use tokio::{time}; // 1.3.0
+use std::io::Write;
+use std::ops::Deref;
+use num_cpus;
+use reqwest::Client;
+use crate::config::config_read;
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Statistic {
+    resp_code: HashMap<u16, usize>,
+    other_err: usize,
+    cps: usize,
+}
+
+impl Statistic {
+    fn new() -> Self {
+        Statistic {
+            resp_code: HashMap::new(),
+            other_err: 0,
+            cps: 0,
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
+    log_init();
+    let config = config_read();
+
+    let mut handlers = vec![];
+    let semaphore = Arc::new(Semaphore::new(0));
+    let inprogress_statistic: Arc<RwLock<Statistic>> = Arc::new(RwLock::new(Statistic::new()));
+    let ui_statistic: Arc<RwLock<Statistic>> = Arc::new(RwLock::new(Statistic::new()));
+    let stop = Arc::new(AtomicBool::new(false));
+
+    for _ in 0..config.max_threads {
+        let semaphore = Arc::clone(&semaphore);
+        let inprogress_statistic = Arc::clone(&inprogress_statistic);
+        let stop = Arc::clone(&stop);
+
+        let h = task::spawn(async move {
+            log::info!("Создание потока нагрузки");
+
+            let client = Client::builder()
+                .timeout(Duration::from_secs(config.request_timeout_sec))
+                .build()
+                .unwrap();
+
+            loop {
+                if config.cps.is_some() {
+                    let p = semaphore.acquire().await.unwrap();
+                    p.forget();
+                }
+
+                if stop.load(Relaxed) == true {
+                    break;
+                }
+
+                let resp = client.get("https://46.17.100.64:38991/hahahkdkd33/").send().await;
+                let mut w = inprogress_statistic.write().unwrap();
+
+                match resp {
+                    Ok(resp) => {
+                        let resp_code = resp.status().as_u16();
+                        *w.resp_code.entry(resp_code).or_insert(0) += 1;
+                        w.cps += 1;
+                    }
+                    Err(err) => {
+                        //println!("{:?}", err.to_string());
+                        w.other_err += 1;
+                    }
+                }
+            }
+            log::info!("Завершение потока нагрузки");
+        });
+
+        handlers.push(h);
+    }
+
+    {
+        let stop = Arc::clone(&stop);
+        let h = task::spawn(async move {
+            log::info!("Создание потока выдающего квоты на запросы");
+            let mut interval = time::interval(Duration::from_millis(1000));
+
+            loop {
+                interval.tick().await;
+
+                if stop.load(Relaxed) == true {
+                    semaphore.forget_permits(Semaphore::MAX_PERMITS);
+                    semaphore.add_permits(Semaphore::MAX_PERMITS);
+                    break;
+                }
+
+                if let Some(cps) = config.cps {
+                    semaphore.forget_permits(Semaphore::MAX_PERMITS);
+                    semaphore.add_permits(cps);
+                }
+            }
+            log::info!("Завершение потока выдающего квоты на запросы");
+        });
+        handlers.push(h);
+    }
+
+    {
+        let stop = Arc::clone(&stop);
+        let inprogress_statistic = Arc::clone(&inprogress_statistic);
+        let ui_statistic = Arc::clone(&ui_statistic);
+        let h = task::spawn(async move {
+            log::info!("Создание потока статистики");
+            let mut interval = time::interval(Duration::from_millis(1000));
+
+            loop {
+                interval.tick().await;
+
+                if stop.load(Relaxed) == true {
+                    break;
+                }
+
+                let mut iw = inprogress_statistic.write().unwrap();
+                let mut uw = ui_statistic.write().unwrap();
+                if !config.ui {
+                    log::info!("{:?}", iw.deref());
+                }
+
+                uw.cps = iw.cps;
+                uw.resp_code = iw.resp_code.clone();
+                uw.other_err = iw.other_err;
+
+                iw.cps = 0;
+            }
+            log::info!("Завершение потока статистики");
+        });
+        handlers.push(h);
+    }
+
+
+    {
+        let stop = Arc::clone(&stop);
+        let ui_statistic = Arc::clone(&ui_statistic);
+        let h = task::spawn(async move {
+            log::info!("Создание потока UI");
+            ui::ui_main(config.ui, ui_statistic).unwrap();
+            stop.store(true, Relaxed);
+            log::info!("Завершение потока UI");
+        });
+
+        handlers.push(h);
+    }
+
+
+    for h in handlers {
+        h.await.unwrap();
+    }
+
+    Ok(())
+}
+
+fn log_init() {
+    use chrono::Local;
+    use env_logger::Builder;
+    use log::LevelFilter;
+
+    Builder::new()
+        .format(|buf, record| {
+            writeln!(buf,
+                     "{} [{}] {:?} - {}",
+                     Local::now().format("%Y-%m-%dT%H:%M:%S"),
+                     record.level(),
+                     thread::current().id(),
+                     record.args()
+            )
+        })
+        .filter(None, LevelFilter::Info)
+        .init();
+}
