@@ -44,7 +44,7 @@ impl Statistic {
 }
 
 #[tokio::main]
-async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log_init();
     let config = config_read();
 
@@ -62,9 +62,9 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
         let url = url.clone();
 
         let h = task::spawn(async move  {
-            log::info!("Создание потока нагрузки");
+            //log::info!("Создание потока нагрузки");
 
-            let mut client = Client::builder()
+            let client = Client::builder()
                 .timeout(Duration::from_secs(config.request_timeout_sec))
                 .danger_accept_invalid_certs(config.check_cert);
 
@@ -91,13 +91,17 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
                         //w.error_log.push_back(format!("{}| {} - {}", Local::now().format("%H:%M:%S|"), "ok", url));
                     }
                     Err(err) => {
-                        //println!("{:?}", err.to_string());
                         w.error_log.push_back(format!("{}| {}", Local::now().format("%H:%M:%S"), err));
                         w.other_err += 1;
+
+                        //if err.is_request() {
+                        //    stop.store(true, Relaxed);
+                        //    w.error_log.push_back(format!("{}| {}", Local::now().format("%H:%M:%S"), "Остановка запросов из-за ошибки"));
+                        //}
                     }
                 }
             }
-            log::info!("Завершение потока нагрузки");
+            //log::info!("Завершение потока нагрузки");
         });
 
         handlers.push(h);
@@ -106,7 +110,7 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
     {
         let stop = Arc::clone(&stop);
         let h = task::spawn(async move {
-            log::info!("Создание потока выдающего квоты на запросы");
+            //log::info!("Создание потока выдающего квоты на запросы");
             let mut interval = time::interval(Duration::from_millis(1000));
 
             loop {
@@ -123,7 +127,7 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
                     semaphore.add_permits(cps);
                 }
             }
-            log::info!("Завершение потока выдающего квоты на запросы");
+            //log::info!("Завершение потока выдающего квоты на запросы");
         });
         handlers.push(h);
     }
@@ -133,20 +137,25 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
         let inprogress_statistic = Arc::clone(&inprogress_statistic);
         let ui_statistic = Arc::clone(&ui_statistic);
         let h = task::spawn(async move {
-            log::info!("Создание потока статистики");
+            //log::info!("Создание потока статистики");
             let mut interval = time::interval(Duration::from_millis(1000));
+            let mut stop_counter = 5;
 
             loop {
                 interval.tick().await;
 
                 if stop.load(Relaxed) == true {
-                    break;
+                    stop_counter -= 1;
+
+                    if stop_counter == 0 {
+                        break;
+                    }
                 }
 
                 let mut iw = inprogress_statistic.write().unwrap();
                 let mut uw = ui_statistic.write().unwrap();
                 if !config.ui {
-                    log::info!("{:?}", iw.deref());
+                    //log::info!("{:?}", iw.deref());
                 }
 
                 uw.cps = iw.cps;
@@ -156,7 +165,7 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
 
                 iw.cps = 0;
             }
-            log::info!("Завершение потока статистики");
+            // log::info!("Завершение потока статистики");
         });
         handlers.push(h);
     }
@@ -166,10 +175,10 @@ async fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
         let stop = Arc::clone(&stop);
         let ui_statistic = Arc::clone(&ui_statistic);
         let h = task::spawn(async move {
-            log::info!("Создание потока UI");
+            //log::info!("Создание потока UI");
             ui::ui_main(config.ui, ui_statistic).unwrap();
             stop.store(true, Relaxed);
-            log::info!("Завершение потока UI");
+            //log::info!("Завершение потока UI");
         });
 
         handlers.push(h);
