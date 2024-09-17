@@ -1,25 +1,25 @@
-mod ui;
-mod loader;
 mod config;
+mod loader;
+mod ui;
 
-use std::collections::HashMap;
-use tokio::task;
-use serde::{Deserialize, Serialize};
-use std::{thread};
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool};
-use std::sync::atomic::Ordering::Relaxed;
-use tokio::sync::Semaphore;
-use std::time::Duration;
-use tokio::{time}; // 1.3.0
-use std::io::Write;
-use std::ops::Deref;
-use reqwest::{Client};
 use crate::config::config_read;
-use circular_buffer::CircularBuffer;
 use chrono::Local;
+use circular_buffer::CircularBuffer;
 use env_logger::Builder;
 use log::LevelFilter;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::io::Write;
+use std::ops::Deref;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::{Arc, RwLock};
+use std::thread;
+use std::time::Duration;
+use tokio::sync::Semaphore;
+use tokio::task;
+use tokio::time; // 1.3.0
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Statistic {
@@ -29,7 +29,7 @@ struct Statistic {
 
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
-    error_log: CircularBuffer::<256, String>,
+    error_log: CircularBuffer<256, String>,
 }
 
 impl Statistic {
@@ -54,17 +54,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui_statistic: Arc<RwLock<Statistic>> = Arc::new(RwLock::new(Statistic::new()));
     let stop = Arc::new(AtomicBool::new(false));
     let url = config.url;
-    
-    
+
     // test request
     {
         let client = Client::builder()
-        .timeout(Duration::from_secs(config.request_timeout_sec))
-        .danger_accept_invalid_hostnames(config.check_cert)
-        .danger_accept_invalid_certs(config.check_cert);
+            .timeout(Duration::from_secs(config.request_timeout_sec))
+            .danger_accept_invalid_hostnames(config.check_cert)
+            .danger_accept_invalid_certs(config.check_cert);
 
         let client = client.build().unwrap();
-        
+
         let resp = client.get(&url).send().await;
         let mut w = inprogress_statistic.write().unwrap();
 
@@ -76,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 //w.error_log.push_back(format!("{}| {} - {}", Local::now().format("%H:%M:%S|"), "ok", url));
             }
             Err(err) => {
-                return Err(err);
+                return Err(err.into());
                 //if err.is_request() {
                 //    stop.store(true, Relaxed);
                 //    w.error_log.push_back(format!("{}| {}", Local::now().format("%H:%M:%S"), "Остановка запросов из-за ошибки"));
@@ -91,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let stop = Arc::clone(&stop);
         let url = url.clone();
 
-        let h = task::spawn(async move  {
+        let h = task::spawn(async move {
             //log::info!("Создание потока нагрузки");
 
             let client = Client::builder()
@@ -122,7 +121,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         //w.error_log.push_back(format!("{}| {} - {}", Local::now().format("%H:%M:%S|"), "ok", url));
                     }
                     Err(err) => {
-                        w.error_log.push_back(format!("{}| {}", Local::now().format("%H:%M:%S"), err));
+                        w.error_log.push_back(format!(
+                            "{}| {}",
+                            Local::now().format("%H:%M:%S"),
+                            err
+                        ));
                         w.other_err += 1;
 
                         //if err.is_request() {
@@ -201,7 +204,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         handlers.push(h);
     }
 
-
     {
         let stop = Arc::clone(&stop);
         let ui_statistic = Arc::clone(&ui_statistic);
@@ -215,7 +217,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         handlers.push(h);
     }
 
-
     for h in handlers {
         h.await.unwrap();
     }
@@ -226,12 +227,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn log_init() {
     Builder::new()
         .format(|buf, record| {
-            writeln!(buf,
-                     "{} [{}] {:?} - {}",
-                     Local::now().format("%Y-%m-%dT%H:%M:%S"),
-                     record.level(),
-                     thread::current().id(),
-                     record.args()
+            writeln!(
+                buf,
+                "{} [{}] {:?} - {}",
+                Local::now().format("%Y-%m-%dT%H:%M:%S"),
+                record.level(),
+                thread::current().id(),
+                record.args()
             )
         })
         .filter(None, LevelFilter::Info)

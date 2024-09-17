@@ -1,16 +1,18 @@
-use std::io;
-use std::io::stdout;
-use std::sync::{Arc, RwLock};
+use crate::Statistic;
 use chrono::Local;
 use ratatui::backend::CrosstermBackend;
-use ratatui::crossterm::{event, ExecutableCommand};
 use ratatui::crossterm::event::{Event, KeyCode};
-use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
-use ratatui::{Frame, Terminal};
+use ratatui::crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
+use ratatui::crossterm::{event, ExecutableCommand};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, List, Paragraph};
-use crate::Statistic;
+use ratatui::{Frame, Terminal};
+use std::io;
+use std::io::stdout;
+use std::sync::{Arc, RwLock};
 
 pub fn ui_main(draw_ui: bool, statistic: Arc<RwLock<Statistic>>) -> io::Result<()> {
     enable_raw_mode()?;
@@ -66,23 +68,22 @@ fn ui(frame: &mut Frame, statistic: &Arc<RwLock<Statistic>>) {
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
             .areas(frame.area());
 
-
-    frame.render_widget(Paragraph::new(
-        vec![
+    frame.render_widget(
+        Paragraph::new(vec![
             Line::from(format!("Время {}", Local::now().format("%H:%M:%S"))),
             Line::from(format!("HTTP code {:?}", resp_code)),
             Line::from(format!("Кол-во остальных ошибок {}", other_err)),
             Line::from(format!("CPS {}", cps)),
-        ]
-    ).block(Block::bordered().title("Статистика")), left_area);
+        ])
+        .block(Block::bordered().title("Статистика")),
+        left_area,
+    );
 
-    frame
-        .render_widget(
-            error_log
-                .into_iter()
-                .collect::<List>()
-                .block(Block::bordered().title("Ошибки")
-                ),
-            right_area
-        );
+    frame.render_widget(
+        error_log
+            .into_iter()
+            .collect::<List>()
+            .block(Block::bordered().title("Ошибки")),
+        right_area,
+    );
 }
