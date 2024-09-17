@@ -54,6 +54,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui_statistic: Arc<RwLock<Statistic>> = Arc::new(RwLock::new(Statistic::new()));
     let stop = Arc::new(AtomicBool::new(false));
     let url = config.url;
+    
+    
+    // test request
+    {
+        let client = Client::builder()
+        .timeout(Duration::from_secs(config.request_timeout_sec))
+        .danger_accept_invalid_hostnames(config.check_cert)
+        .danger_accept_invalid_certs(config.check_cert);
+
+        let client = client.build().unwrap();
+        
+        let resp = client.get(&url).send().await;
+        let mut w = inprogress_statistic.write().unwrap();
+
+        match resp {
+            Ok(resp) => {
+                let resp_code = resp.status().as_u16();
+                *w.resp_code.entry(resp_code).or_insert(0) += 1;
+                w.cps += 1;
+                //w.error_log.push_back(format!("{}| {} - {}", Local::now().format("%H:%M:%S|"), "ok", url));
+            }
+            Err(err) => {
+                return Err(err);
+                //if err.is_request() {
+                //    stop.store(true, Relaxed);
+                //    w.error_log.push_back(format!("{}| {}", Local::now().format("%H:%M:%S"), "Остановка запросов из-за ошибки"));
+                //}
+            }
+        }
+    }
 
     for _ in 0..config.thread_count {
         let semaphore = Arc::clone(&semaphore);
@@ -66,6 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let client = Client::builder()
                 .timeout(Duration::from_secs(config.request_timeout_sec))
+                .danger_accept_invalid_hostnames(config.check_cert)
                 .danger_accept_invalid_certs(config.check_cert);
 
             let client = client.build().unwrap();

@@ -1,11 +1,11 @@
 use std::fs;
 use serde::{Deserialize, Serialize};
 
-fn get_default_cps() -> Option<usize> { None }
-fn get_default_url() -> String { "https://google.com".to_string() }
+fn get_default_cps() -> Option<usize> { Some(1) }
+fn get_default_url() -> String { "https://10.199.28.159".to_string() }
 fn get_default_max_connections() -> Option<u32> { None }
 fn get_default_max_time() -> Option<u32> { None }
-fn get_default_thread_count() -> usize { num_cpus::get() }
+fn get_default_thread_count() -> usize { 1 }
 fn get_default_request_timeout_sec() -> u64 { 10 }
 fn get_default_check_cert() -> bool { false }
 fn get_default_ui() -> bool { true }
