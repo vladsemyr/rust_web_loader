@@ -11,7 +11,6 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
-use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, RwLock};
@@ -29,7 +28,7 @@ struct Statistic {
 
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
-    error_log: CircularBuffer<256, String>,
+    error_log: CircularBuffer<16, String>,
 }
 
 impl Statistic {
@@ -56,11 +55,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let url = config.url;
 
     // test request
+    if false
     {
         let client = Client::builder()
-            .timeout(Duration::from_secs(config.request_timeout_sec))
+            .timeout(Duration::from_secs_f32(config.request_timeout_sec))
             .danger_accept_invalid_hostnames(config.check_cert)
-            .danger_accept_invalid_certs(config.check_cert);
+            .danger_accept_invalid_certs(config.check_cert)
+            .pool_idle_timeout(Duration::from_secs(0))
+            .tcp_keepalive(Duration::from_secs(0));
 
         let client = client.build().unwrap();
 
@@ -93,14 +95,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let h = task::spawn(async move {
             //log::info!("Создание потока нагрузки");
 
-            let client = Client::builder()
-                .timeout(Duration::from_secs(config.request_timeout_sec))
-                .danger_accept_invalid_hostnames(config.check_cert)
-                .danger_accept_invalid_certs(config.check_cert);
-
-            let client = client.build().unwrap();
 
             loop {
+                let client = Client::builder()
+                    .timeout(Duration::from_secs_f32(config.request_timeout_sec))
+                    .danger_accept_invalid_hostnames(config.check_cert)
+                    .danger_accept_invalid_certs(config.check_cert)
+                    //.pool_idle_timeout(Duration::from_secs(0))
+                    //.tcp_keepalive(Duration::from_secs(0))
+                    ;
+
+                let client = client.build().unwrap();
+                
                 if config.cps.is_some() {
                     let p = semaphore.acquire().await.unwrap();
                     p.forget();
@@ -122,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     Err(err) => {
                         w.error_log.push_back(format!(
-                            "{}| {}",
+                            "{}| {:?}",
                             Local::now().format("%H:%M:%S"),
                             err
                         ));
@@ -145,7 +151,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let stop = Arc::clone(&stop);
         let h = task::spawn(async move {
             //log::info!("Создание потока выдающего квоты на запросы");
-            let mut interval = time::interval(Duration::from_millis(1000));
+            let mut interval_div = 1usize;
+            
+            if let Some(cps) = config.cps {
+                if cps > 100 {
+                    interval_div = 10;
+                }
+            }
+            
+            let mut interval = time::interval(Duration::from_millis(1000 / interval_div as u64));
 
             loop {
                 interval.tick().await;
@@ -158,7 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if let Some(cps) = config.cps {
                     semaphore.forget_permits(Semaphore::MAX_PERMITS);
-                    semaphore.add_permits(cps);
+                    semaphore.add_permits(cps / interval_div);
                 }
             }
             //log::info!("Завершение потока выдающего квоты на запросы");

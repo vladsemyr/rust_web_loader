@@ -1,5 +1,6 @@
 {
   "url": "https://ya.ru",
   "thread_count": 1,
-  "cps": 1
+  "cps": 1,
+  "request_timeout_sec": 1.0
 }

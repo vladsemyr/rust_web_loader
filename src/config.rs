@@ -16,8 +16,8 @@ fn get_default_max_time() -> Option<u32> {
 fn get_default_thread_count() -> usize {
     1
 }
-fn get_default_request_timeout_sec() -> u64 {
-    10
+fn get_default_request_timeout_sec() -> f32 {
+    10.0
 }
 fn get_default_check_cert() -> bool {
     false
@@ -44,7 +44,7 @@ pub struct Config {
     pub thread_count: usize,
 
     #[serde(default = "get_default_request_timeout_sec")]
-    pub request_timeout_sec: u64,
+    pub request_timeout_sec: f32,
 
     #[serde(default = "get_default_check_cert")]
     pub check_cert: bool,

@@ -7,8 +7,9 @@ use ratatui::crossterm::terminal::{
 };
 use ratatui::crossterm::{event, ExecutableCommand};
 use ratatui::layout::{Constraint, Layout};
+use ratatui::style::{Style, Stylize};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, List, Paragraph};
+use ratatui::widgets::{Block, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
 use std::io;
 use std::io::stdout;
@@ -74,16 +75,25 @@ fn ui(frame: &mut Frame, statistic: &Arc<RwLock<Statistic>>) {
             Line::from(format!("HTTP code {:?}", resp_code)),
             Line::from(format!("Кол-во остальных ошибок {}", other_err)),
             Line::from(format!("CPS {}", cps)),
+            Line::from(format!("")),
+            Line::from(format!("Нажмите 'q' для выхода")),
         ])
-        .block(Block::bordered().title("Статистика")),
+        .block(Block::bordered().title("Статистика").border_style(Style::new().light_blue().bold())),
         left_area,
     );
 
     frame.render_widget(
-        error_log
+        Paragraph::new(
+            error_log
             .into_iter()
-            .collect::<List>()
-            .block(Block::bordered().title("Ошибки")),
+            .rev()
+            .collect::<Vec<_>>().join("\n")
+            //.collect::<List>()
+            //.,
+        )
+        .style(Style::new().red())
+        .wrap(Wrap {trim: false})
+        .block(Block::bordered().title("Журнал").border_style(Style::new().light_blue().bold())),
         right_area,
     );
 }

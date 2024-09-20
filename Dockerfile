@@ -24,4 +24,5 @@ RUN apt update
 #RUN apt-get install -y libssl-dev
 
 COPY --from=builder /usr/src/${NAME}/target/release/${NAME} /usr/local/bin/${NAME}
+COPY --from=builder /usr/src/${NAME}/config.json .
 CMD ${NAME}
